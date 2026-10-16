@@ -20,7 +20,6 @@
             color: #212121;
             overflow: hidden;
         }
-
         /* ========== 左侧侧边栏 ========== */
         .sidebar {
             width: 260px;
@@ -68,7 +67,6 @@
             border-top:1px solid #e5e5e7;
             padding-top:12px;
         }
-
         /* ========== 主对话区域 ========== */
         .main-container {
             flex:1;
@@ -155,7 +153,6 @@
             padding-left:24px;
             margin:8px 0;
         }
-
         /* ========== 底部输入框区域 ========== */
         .input-area {
             padding:16px max(16px, calc((100% - 820px)/2));
@@ -248,7 +245,6 @@
             background:#b4c4e8;
             cursor:not-allowed;
         }
-
         /* 图片全屏预览弹窗 */
         .img-modal {
             position:fixed;
@@ -279,9 +275,17 @@
             0%,50%{opacity:1;}
             51%,100%{opacity:0;}
         }
+        /* 隐藏真实文件选择框 */
+        .hidden-input{
+            display:none;
+        }
     </style>
 </head>
 <body>
+    <!-- 【移到外部，不再嵌套在label中】 -->
+    <input type="file" id="fileUpload" class="hidden-input" multiple>
+    <input type="file" id="imgUpload" class="hidden-input" accept="image/*" multiple>
+
     <!-- 左侧边栏 -->
     <div class="sidebar">
         <button class="new-chat-btn" id="newChatBtn">➕ 新建对话</button>
@@ -294,14 +298,12 @@
             <div class="history-item">设置</div>
         </div>
     </div>
-
     <!-- 主区域 -->
     <div class="main-container">
         <div class="chat-wrap" id="chatContainer">
             <!-- 欢迎文字 -->
             <div class="welcome-tip" id="welcomeText">我是你的AI助手，有什么问题都可以问我哦</div>
         </div>
-
         <div class="input-area">
             <div class="input-box">
                 <!-- 输入框内图片、文件预览容器 -->
@@ -309,60 +311,77 @@
                 <div class="input-row">
                     <textarea id="msgInput" placeholder="输入消息，Shift+Enter换行"></textarea>
                     <div class="tool-bar">
-                        <!-- 添加文件按钮 -->
-                        <label>
-                            <input type="file" id="fileUpload" hidden>
-                            <button class="icon-btn" type="button">📎</button>
-                        </label>
-                        <!-- 图片上传按钮 -->
-                        <label>
-                            <input type="file" id="imgUpload" accept="image/*" hidden>
-                            <button class="icon-btn" type="button">🖼️</button>
-                        </label>
+                        <!-- 去掉label嵌套，直接普通按钮 -->
+                        <button class="icon-btn" id="btnFile" type="button">📎</button>
+                        <button class="icon-btn" id="btnImg" type="button">🖼️</button>
                         <button class="send-btn" id="sendBtn">➤</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
     <!-- 图片预览弹窗 -->
     <div class="img-modal" id="imgModal">
         <img class="modal-img" id="modalImg">
     </div>
-
     <script>
         // 元素获取
         const chatContainer = document.getElementById('chatContainer');
         const welcomeText = document.getElementById('welcomeText');
         const msgInput = document.getElementById('msgInput');
         const sendBtn = document.getElementById('sendBtn');
+
         const imgUpload = document.getElementById('imgUpload');
         const fileUpload = document.getElementById('fileUpload');
+        const btnImg = document.getElementById('btnImg');
+        const btnFile = document.getElementById('btnFile');
+
         const previewWrap = document.getElementById('previewWrap');
         const imgModal = document.getElementById('imgModal');
         const modalImg = document.getElementById('modalImg');
         const newChatBtn = document.getElementById('newChatBtn');
 
-        let uploadFiles = []; // 存储上传的图片和文件
+        // ========= 后端对接配置 =========
+        const API_URL = "/chat/stream";
+        let messages = [];               // 多轮对话上下文
+        let pendingAttachments = [];     // 待发送附件 {type:image/file,src?,name?,content?}
+
+        // ✅ JS手动触发文件弹窗，替代label，浏览器100%兼容
+        btnImg.onclick = ()=> imgUpload.click();
+        btnFile.onclick = ()=> fileUpload.click();
+
+        // 工具：File转base64
+        function fileToBase64(file){
+            return new Promise(resolve=>{
+                const r = new FileReader();
+                r.onload = e=>resolve(e.target.result);
+                r.readAsDataURL(file);
+            })
+        }
+        // 工具：读取文本类文件
+        function readTextFile(file){
+            return new Promise(resolve=>{
+                const r = new FileReader();
+                r.onload = e=>resolve(e.target.result);
+                r.readAsText(file);
+            })
+        }
 
         // 图片上传逻辑
-        imgUpload.onchange = function(e){
-            const file = e.target.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = evt => {
-                const src = evt.target.result;
+        imgUpload.onchange = async function(e){
+            const files = Array.from(e.target.files);
+            for(const file of files){
+                const src = await fileToBase64(file);
+                const idx = pendingAttachments.length;
+                pendingAttachments.push({type:"image", src, name:file.name});
                 const wrap = document.createElement('div');
                 wrap.className = "thumb-img";
-                wrap.dataset.type = "image";
-                wrap.dataset.src = src;
+                wrap.dataset.idx = idx;
                 wrap.innerHTML = `
                     <img style="width:100%;height:100%;object-fit:cover;border-radius:8px" src="${src}" />
                     <button class="remove-btn" style="position:absolute;top:-6px;right:-6px;">×</button>
                 `;
                 previewWrap.appendChild(wrap);
-                // 预览大图
                 wrap.onclick = (ev)=>{
                     if(ev.target.classList.contains('remove-btn')) return;
                     modalImg.src = src;
@@ -370,40 +389,52 @@
                 }
                 wrap.querySelector('.remove-btn').onclick = (ev)=>{
                     ev.stopPropagation();
+                    const delIdx = Number(wrap.dataset.idx);
+                    pendingAttachments.splice(delIdx,1);
                     wrap.remove();
+                    console.log("删除附件，剩余：",pendingAttachments);
                 }
             }
-            reader.readAsDataURL(file);
+            imgUpload.value = null;
+            console.log("图片选择完成，pendingAttachments：",pendingAttachments);
         }
         imgModal.onclick = ()=> imgModal.classList.remove('show');
 
         // ========= 添加文件按钮逻辑 =========
-        fileUpload.onchange = function(e){
-            const file = e.target.files[0];
-            if(!file) return;
-            const fileItem = document.createElement('div');
-            fileItem.className = "file-preview";
-            fileItem.dataset.type = "file";
-            fileItem.dataset.name = file.name;
-            fileItem.innerText = `📄 ${file.name}`;
-            const delBtn = document.createElement('button');
-            delBtn.className = 'remove-btn';
-            delBtn.textContent = '×';
-            delBtn.onclick = (ev)=>{
-                ev.stopPropagation();
-                fileItem.remove();
+        fileUpload.onchange = async function(e){
+            const files = Array.from(e.target.files);
+            for(const file of files){
+                const textContent = await readTextFile(file);
+                const idx = pendingAttachments.length;
+                pendingAttachments.push({type:"file", name:file.name, content:textContent});
+                const fileItem = document.createElement('div');
+                fileItem.className = "file-preview";
+                fileItem.dataset.idx = idx;
+                fileItem.innerText = `📄 ${file.name}`;
+                const delBtn = document.createElement('button');
+                delBtn.className = 'remove-btn';
+                delBtn.textContent = '×';
+                delBtn.onclick = (ev)=>{
+                    ev.stopPropagation();
+                    const delIdx = Number(fileItem.dataset.idx);
+                    pendingAttachments.splice(delIdx,1);
+                    fileItem.remove();
+                    console.log("删除附件，剩余：",pendingAttachments);
+                }
+                fileItem.appendChild(delBtn);
+                previewWrap.appendChild(fileItem);
             }
-            fileItem.appendChild(delBtn);
-            previewWrap.appendChild(fileItem);
+            fileUpload.value = null;
+            console.log("文件选择完成，pendingAttachments：",pendingAttachments);
         }
 
         // 添加用户消息（直接渲染）
-        function appendUserMessage(text, fileList){
+        function appendUserMessage(text, attachList){
             welcomeText.style.display = "none";
             const wrap = document.createElement('div');
             wrap.className = `msg-item user`;
             let fileHtml = '';
-            fileList.forEach(item=>{
+            attachList.forEach(item=>{
                 if(item.type === 'image'){
                     fileHtml += `<img class="msg-img" src="${item.src}">`;
                 }else{
@@ -421,8 +452,8 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // AI流式打字输出
-        async function streamAiReply(rawText) {
+        // 创建AI消息DOM，返回dom引用用于流式写入
+        function createAiMessageDom(){
             welcomeText.style.display = "none";
             const wrap = document.createElement('div');
             wrap.className = `msg-item ai`;
@@ -434,50 +465,108 @@
             `;
             chatContainer.appendChild(wrap);
             const dom = wrap.querySelector('#ai-stream');
-            let finalStr = "";
-            // 逐字输出
-            for(let char of rawText){
-                finalStr += char;
-                dom.innerHTML = marked.parse(finalStr) + `<span class="typing-cursor"></span>`;
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                await new Promise(resolve => setTimeout(resolve,25));
-            }
-            // 打字结束，移除光标
-            dom.innerHTML = marked.parse(finalStr);
+            return dom;
         }
 
-        // 发送消息
+        // 发送消息对接后端SSE
         async function sendMessage(){
             const text = msgInput.value.trim();
-            const previewItems = previewWrap.querySelectorAll('[data-type]');
-            const attachList = [];
-            previewItems.forEach(el=>{
-                attachList.push({
-                    type: el.dataset.type,
-                    src: el.dataset.src || '',
-                    name: el.dataset.name || ''
-                })
-            })
-            if(!text && attachList.length === 0) return;
+            if(!text && pendingAttachments.length ===0) return;
             sendBtn.disabled = true;
-            appendUserMessage(text, attachList);
-            msgInput.value = "";
-            previewWrap.innerHTML = ""; // 清空附件预览
+            console.log("点击发送，附件数组：",pendingAttachments);
 
-            // 模拟AI返回markdown文本
-            const mockAiResp = `# 你好
-收到你的提问，我可以支持：
-1. 代码块
-\`\`\`js
-console.log("hello world")
-\`\`\`
-2. **加粗文字**、普通文本
-> 引用文本测试`;
-            await streamAiReply(mockAiResp);
+            // 组装传给后端的user content数组（deepseek多模态格式）
+            let userContent = [];
+            userContent.push({type:"text", text:text});
+            pendingAttachments.forEach(at=>{
+                if(at.type==="image"){
+                    userContent.push({type:"image_url", image_url:{url:at.src}});
+                }else if(at.type==="file"){
+                    userContent.push({type:"text", text:`【文件${at.name}】\n${at.content}`});
+                }
+            })
+            console.log("组装后的userContent",userContent);
+
+            // 渲染用户气泡
+            appendUserMessage(text, pendingAttachments);
+            // 存入上下文
+            messages.push({role:"user", content:userContent});
+
+            // 清空输入区
+            msgInput.value = "";
+            previewWrap.innerHTML = "";
+            pendingAttachments = [];
+
+            // 判断是否包含图片，选择模型
+            const hasImage = messages.some(m=>{
+                if(Array.isArray(m.content)) return m.content.some(c=>c.type==="image_url");
+                return false;
+            })
+            const modelName = hasImage ? "deepseek-flash" : "deepseek-v4-pro";
+            console.log("使用模型：",modelName);
+
+            // 创建AI气泡
+            const aiDom = createAiMessageDom();
+            let aiFullText = "";
+
+            try{
+                const resp = await fetch(API_URL,{
+                    method:"POST",
+                    headers:{"Content-Type":"application/json"},
+                    body:JSON.stringify({
+                        model: modelName,
+                        messages: messages,
+                        stream:true
+                    })
+                })
+                if(!resp.ok){
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+                while(true){
+                    const {done,value} = await reader.read();
+                    if(done) break;
+                    buffer += decoder.decode(value,{stream:true});
+                    const chunks = buffer.split("\n\n");
+                    buffer = chunks.pop();
+                    for(let piece of chunks){
+                        if(!piece.startsWith("data: ")) continue;
+                        let dataStr = piece.slice(6);
+                        if(dataStr.trim() === "[DONE]") continue;
+                        try{
+                            const obj = JSON.parse(dataStr);
+                            if(obj.error){
+                                alert(obj.error);
+                                aiFullText += `\n【系统报错】${obj.error}`;
+                                aiDom.innerHTML = marked.parse(aiFullText);
+                                messages.push({role:"assistant", content:aiFullText});
+                                sendBtn.disabled = false;
+                                return;
+                            }
+                            if(obj.choices && obj.choices[0].delta && obj.choices[0].delta.content){
+                                aiFullText += obj.choices[0].delta.content;
+                                aiDom.innerHTML = marked.parse(aiFullText)+`<span class="typing-cursor"></span>`;
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            }
+                        }catch(e){
+                            // json解析异常跳过
+                        }
+                    }
+                }
+                // 流结束，去掉光标，保存assistant消息
+                aiDom.innerHTML = marked.parse(aiFullText);
+                messages.push({role:"assistant", content:aiFullText});
+            }catch(err){
+                aiFullText += `\n【网络异常】${err.message}`;
+                aiDom.innerHTML = marked.parse(aiFullText);
+                alert("请求异常："+err.message);
+            }
             sendBtn.disabled = false;
         }
-        sendBtn.onclick = sendMessage;
 
+        sendBtn.onclick = sendMessage;
         // Enter发送，Shift+Enter换行
         msgInput.addEventListener('keydown', (e)=>{
             if(e.key === 'Enter' && !e.shiftKey) {
@@ -486,13 +575,16 @@ console.log("hello world")
             }
         })
 
-        // 新建对话
+        // 新建对话：清空DOM + 清空会话上下文 + 清空附件
         newChatBtn.onclick = ()=>{
             chatContainer.innerHTML = "";
             chatContainer.appendChild(welcomeText);
             welcomeText.style.display = "block";
             previewWrap.innerHTML = "";
             msgInput.value = "";
+            messages = [];
+            pendingAttachments = [];
+            console.log("新建对话，全部清空");
         }
     </script>
 </body>
