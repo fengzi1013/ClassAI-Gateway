@@ -20,7 +20,7 @@
             color: #212121;
             overflow: hidden;
         }
-        /* ========== 左侧侧边栏 ========== */
+        /* ========== 左侧侧边栏（仅保留新建对话按钮） ========== */
         .sidebar {
             width: 260px;
             background-color: #f7f7f8;
@@ -40,32 +40,9 @@
             display:flex;
             align-items:center;
             gap:8px;
-            margin-bottom:20px;
         }
         .new-chat-btn:hover {
             background-color:#efeff0;
-        }
-        .history-title {
-            font-size:12px;
-            color:#888;
-            margin-bottom:8px;
-        }
-        .history-item {
-            padding:8px 10px;
-            border-radius:8px;
-            font-size:14px;
-            cursor:pointer;
-            white-space:nowrap;
-            overflow:hidden;
-            text-overflow:ellipsis;
-        }
-        .history-item:hover {
-            background-color:#e9e9eb;
-        }
-        .sidebar-footer {
-            margin-top:auto;
-            border-top:1px solid #e5e5e7;
-            padding-top:12px;
         }
         /* ========== 主对话区域 ========== */
         .main-container {
@@ -282,22 +259,15 @@
     </style>
 </head>
 <body>
-    <!-- 【移到外部，不再嵌套在label中】 -->
+    <!-- 隐藏的文件input -->
     <input type="file" id="fileUpload" class="hidden-input" multiple>
     <input type="file" id="imgUpload" class="hidden-input" accept="image/*" multiple>
 
-    <!-- 左侧边栏 -->
+    <!-- 左侧侧边栏，只保留新建对话按钮 -->
     <div class="sidebar">
         <button class="new-chat-btn" id="newChatBtn">➕ 新建对话</button>
-        <div class="history-title">历史对话</div>
-        <div id="historyList">
-            <div class="history-item">对话 01</div>
-            <div class="history-item">对话 02</div>
-        </div>
-        <div class="sidebar-footer">
-            <div class="history-item">设置</div>
-        </div>
     </div>
+
     <!-- 主区域 -->
     <div class="main-container">
         <div class="chat-wrap" id="chatContainer">
@@ -311,7 +281,6 @@
                 <div class="input-row">
                     <textarea id="msgInput" placeholder="输入消息，Shift+Enter换行"></textarea>
                     <div class="tool-bar">
-                        <!-- 去掉label嵌套，直接普通按钮 -->
                         <button class="icon-btn" id="btnFile" type="button">📎</button>
                         <button class="icon-btn" id="btnImg" type="button">🖼️</button>
                         <button class="send-btn" id="sendBtn">➤</button>
@@ -346,7 +315,7 @@
         let messages = [];               // 多轮对话上下文
         let pendingAttachments = [];     // 待发送附件 {type:image/file,src?,name?,content?}
 
-        // ✅ JS手动触发文件弹窗，替代label，浏览器100%兼容
+        // JS手动触发文件弹窗
         btnImg.onclick = ()=> imgUpload.click();
         btnFile.onclick = ()=> fileUpload.click();
 
@@ -400,7 +369,7 @@
         }
         imgModal.onclick = ()=> imgModal.classList.remove('show');
 
-        // ========= 添加文件按钮逻辑 =========
+        // 文件上传逻辑
         fileUpload.onchange = async function(e){
             const files = Array.from(e.target.files);
             for(const file of files){
