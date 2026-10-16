@@ -1,0 +1,11 @@
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.env
+# windows
+*.bat.log
+.venv/
+venv/

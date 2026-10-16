@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AI助教 - 教师管理后台</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+body{background:#f2f3f5;padding:20px}
+.container{max-width:1600px;margin:0 auto}
+h1{margin-bottom:10px;color:#222}
+.global-tip{background:#e8f3ff;padding:10px;border-radius:8px;margin-bottom:16px}
+.panel{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 5px #0002}
+.login-area{margin-bottom:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#pwdInput{padding:8px 12px;font-size:16px;width:220px;border:1px solid #ccc;border-radius:6px}
+button{padding:7px 10px;background:#1677ff;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px}
+.btn-reset{background:#23a55a}
+.btn-black{background:#f53f3f}
+.btn-unblack{background:#ff7d00}
+.btn-export{background:#9254de}
+table{width:100%;border-collapse:collapse;margin-top:15px}
+th,td{border:1px solid #e5e7eb;padding:9px;text-align:left;vertical-align:middle}
+th{background:#f7f8fa}
+.limit-yes{color:red;font-weight:bold}
+.limit-no{color:green}
+.black-yes{background-color:#ffe9e9}
+#tip{margin:10px 0;color:#666}
+.operate-cell{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 机房AI助教 · 学生实时监控后台</h1>
+    <div class="global-tip">全局总Token消耗：<b id="globalToken">0</b></div>
+    <div class="panel">
+        <div class="login-area">
+            <label>管理员密码：</label>
+            <input id="pwdInput" placeholder="输入后台密码">
+            <button id="btnLogin">登录并加载数据</button>
+            <button id="btnRefresh">手动刷新</button>
+            <button id="btnExport" class="btn-export">导出CSV报表</button>
+        </div>
+        <div id="tip">登录成功后页面自动每3秒刷新一次实时数据｜操作：重置限流 / 拉黑解禁学生IP / 导出全班统计CSV</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>学生IP地址</th>
+                    <th>提问次数</th>
+                    <th>输入Token</th>
+                    <th>输出Token</th>
+                    <th>总Token</th>
+                    <th>最近活跃</th>
+                    <th>本分钟请求</th>
+                    <th>限流状态</th>
+                    <th>拉黑状态</th>
+                    <th>最近提问</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="11">请先登录查看数据</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const pwdInput = document.getElementById("pwdInput");
+const btnLogin = document.getElementById("btnLogin");
+const btnRefresh = document.getElementById("btnRefresh");
+const btnExport = document.getElementById("btnExport");
+const tableBody = document.getElementById("tableBody");
+const globalTokenDom = document.getElementById("globalToken");
+let password = "";
+let timer = null;
+
+async function resetLimit(ip){
+    const resp = await fetch(`/api/admin/reset-limit?pwd=${encodeURIComponent(password)}&ip=${encodeURIComponent(ip)}`,{method:"POST"});
+    const ret = await resp.json();
+    alert(ret.msg);
+    loadData();
+}
+async function toggleBlack(ip){
+    const resp = await fetch(`/api/admin/toggle-black?pwd=${encodeURIComponent(password)}&ip=${encodeURIComponent(ip)}`,{method:"POST"});
+    const ret = await resp.json();
+    alert(ret.msg);
+    loadData();
+}
+async function exportCSV(){
+    if(!password){alert("请先登录！");return;}
+    const url = `/api/admin/export-csv?pwd=${encodeURIComponent(password)}`;
+    window.open(url);
+}
+
+async function loadData(){
+    if(!password) return;
+    try{
+        const resp = await fetch(`/api/admin/stats?pwd=${encodeURIComponent(password)}`);
+        if(!resp.ok){
+            alert("密码错误或权限不足");
+            password="";
+            clearInterval(timer);
+            tableBody.innerHTML = `<tr><td colspan="11">访问被拒绝</td></tr>`;
+            return;
+        }
+        const data = await resp.json();
+        globalTokenDom.innerText = data.global_total_token;
+        let html = "";
+        data.list.forEach(item=>{
+            const limitText = item.is_limited ? `<span class="limit-yes">已限流</span>` : `<span class="limit-no">正常</span>`;
+            const blackText = item.is_black ? "<b style='color:red'>已拉黑</b>" : "正常";
+            const rowClass = item.is_black ? "black-yes" : "";
+            let blackBtnText = item.is_black ? "解除拉黑" : "拉黑IP";
+            let blackBtnClass = item.is_black ? "btn-unblack" : "btn-black";
+            html += `
+            <tr class="${rowClass}">
+                <td>${item.ip}</td>
+                <td>${item.total}</td>
+                <td>${item.prompt_tokens}</td>
+                <td>${item.completion_tokens}</td>
+                <td>${item.total_tokens}</td>
+                <td>${item.last_active}</td>
+                <td>${item.current_min_req}/${data.max_per_min}</td>
+                <td>${limitText}</td>
+                <td>${blackText}</td>
+                <td style="max-width:280px;word-break:break-all">${item.last_msg || "无"}</td>
+                <td class="operate-cell">
+                    <button class="btn-reset" onclick="resetLimit('${item.ip}')">重置限流</button>
+                    <button class="${blackBtnClass}" onclick="toggleBlack('${item.ip}')">${blackBtnText}</button>
+                </td>
+            </tr>
+            `
+        })
+        tableBody.innerHTML = html;
+    }catch(e){
+        tableBody.innerHTML = `<tr><td colspan="11">获取数据失败</td></tr>`;
+    }
+}
+
+btnLogin.onclick = ()=>{
+    password = pwdInput.value.trim();
+    if(!password){alert("请输入密码");return;}
+    loadData();
+    if(timer) clearInterval(timer);
+    timer = setInterval(loadData,3000);
+}
+btnRefresh.onclick = loadData;
+btnExport.onclick = exportCSV;
+</script>
+</body>
+</html>
