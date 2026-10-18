@@ -56,8 +56,9 @@ pip install fastapi uvicorn httpx python‑dotenv
 
 ```
 # ===================== LLM大模型接口配置（兼容OpenAI协议接口） =====================
-# 大模型API Key（默认deepseek）
+# 大模型API Key  默认deepseek接口，其他可以不动，直接替换LLM_API_KEY="sk-xxx"即可
 LLM_API_KEY="sk-xxx"
+
 # 接口Base地址，例：https://api.deepseek.com/v1；火山方舟：https://ark.cn-beijing.volces.com/api/v1
 LLM_API_BASE="https://api.deepseek.com/v1"
 # 纯文本对话模型名称
@@ -77,29 +78,35 @@ TIMEOUT=120
 # 单IP每分钟最大提问次数
 RATE_LIMIT_PER_MIN=6
 # IP白名单，不受限流、拉黑限制；填写教师机内网IP，JSON字符串格式
-WHITE_LIST='["127.0.0.1","192.168.1.195"]'
+WHITE_LIST='["127.0.0.1","6.163.159.195"]'
 
 # ===================== 教师后台管理配置 =====================
 # 教师管理后台登录密码
 ADMIN_PASSWORD="admin123"
 # Admin会话加密密钥，请自行替换为随机字符串，用于内存session签名，不要泄露
-ADMIN_SECRET_KEY="98df23ac71b901e42f885610cc22ee77a419f3528ab14c60123456789abcde"
+ADMIN_SECRET_KEY="f23ac71b901e42f885610cc22ee77a419f3528ab14c60123456789a"
 
 # ===================== 请求安全防护配置 =====================
 # HTTP请求体最大字节，防御超大base64图片payload；10485760 = 10MB
 MAX_REQUEST_BODY_SIZE=10485760
 # 学生单条用户文本最大字符数，超长直接拒绝请求
 MAX_USER_TEXT_LENGTH=6000
+```
+
 
 3. 启动服务
+
 - Windows：双击运行 `start_gateway.bat`
 - 命令行：`python main.py`
+
 4. 访问地址
+
 - 学生聊天页面：`http://教师内网IP:8000`
 - 教师管理后台：`http://教师内网IP:8000/admin`
+
 > 
 > 修改 `.env` 配置文件后，**必须重启网关服务才会生效**。
-> 
+
 ## 👨‍🏫教师后台使用说明
 
 1. 访问 `/admin`，输入管理员密码点击登录；登录成功设置会话 Cookie，有效期 1 小时；服务重启需要重新登录。
@@ -152,3 +159,12 @@ python main.py
 pause
 ```
 
+## 后续可拓展方向
+
+1. SQLite 持久化学生统计、黑名单，重启服务数据不丢失
+2. 增加反向代理真实 IP 解析支持
+3. 后台增加搜索过滤、拉黑确认弹窗、自动刷新开关
+4. Token 估算兜底，兼容流式不返回 usage 的大模型
+5. 系统提示词网页端配置，无需修改代码重启
+6. 全局总 Token 阈值告警，防止 API 账单超额
+7. SSE 断线自动重连，学生聊天记录本地 localStorage 持久化
