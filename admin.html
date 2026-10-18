@@ -62,7 +62,6 @@ th{background:#f7f8fa}
         </table>
     </div>
 </div>
-
 <script>
 const pwdInput = document.getElementById("pwdInput");
 const btnLogin = document.getElementById("btnLogin");
@@ -70,36 +69,33 @@ const btnRefresh = document.getElementById("btnRefresh");
 const btnExport = document.getElementById("btnExport");
 const tableBody = document.getElementById("tableBody");
 const globalTokenDom = document.getElementById("globalToken");
-let password = "";
 let timer = null;
 
 async function resetLimit(ip){
-    const resp = await fetch(`/api/admin/reset-limit?pwd=${encodeURIComponent(password)}&ip=${encodeURIComponent(ip)}`,{method:"POST"});
+    const resp = await fetch(`/api/admin/reset-limit?ip=${encodeURIComponent(ip)}`,{method:"POST"});
     const ret = await resp.json();
     alert(ret.msg);
     loadData();
 }
+
 async function toggleBlack(ip){
-    const resp = await fetch(`/api/admin/toggle-black?pwd=${encodeURIComponent(password)}&ip=${encodeURIComponent(ip)}`,{method:"POST"});
+    const resp = await fetch(`/api/admin/toggle-black?ip=${encodeURIComponent(ip)}`,{method:"POST"});
     const ret = await resp.json();
     alert(ret.msg);
     loadData();
 }
+
 async function exportCSV(){
-    if(!password){alert("请先登录！");return;}
-    const url = `/api/admin/export-csv?pwd=${encodeURIComponent(password)}`;
-    window.open(url);
+    window.open(`/api/admin/export-csv`);
 }
 
 async function loadData(){
-    if(!password) return;
     try{
-        const resp = await fetch(`/api/admin/stats?pwd=${encodeURIComponent(password)}`);
+        const resp = await fetch(`/api/admin/stats`);
         if(!resp.ok){
-            alert("密码错误或权限不足");
-            password="";
+            alert("未登录或会话过期，请重新登录");
             clearInterval(timer);
-            tableBody.innerHTML = `<tr><td colspan="11">访问被拒绝</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="11">访问被拒绝，请重新登录</td></tr>`;
             return;
         }
         const data = await resp.json();
@@ -136,13 +132,30 @@ async function loadData(){
     }
 }
 
-btnLogin.onclick = ()=>{
-    password = pwdInput.value.trim();
-    if(!password){alert("请输入密码");return;}
-    loadData();
-    if(timer) clearInterval(timer);
-    timer = setInterval(loadData,3000);
+// 登录：密码通过POST body提交，不再放在URL参数
+btnLogin.onclick = async ()=>{
+    const pwd = pwdInput.value.trim();
+    if(!pwd){alert("请输入密码");return;}
+    try {
+        const res = await fetch("/api/admin/login",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({pwd:pwd})
+        })
+        if(!res.ok){
+            alert("密码错误");
+            return;
+        }
+        await res.json();
+        alert("登录成功");
+        loadData();
+        if(timer) clearInterval(timer);
+        timer = setInterval(loadData,3000);
+    }catch(err){
+        alert("登录请求异常");
+    }
 }
+
 btnRefresh.onclick = loadData;
 btnExport.onclick = exportCSV;
 </script>
