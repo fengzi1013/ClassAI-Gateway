@@ -13,6 +13,8 @@ import secrets
 from io import StringIO
 from collections import defaultdict, deque
 from dotenv import load_dotenv
+from urllib.parse import quote
+
 
 # 加载项目根目录 .env 配置文件
 load_dotenv()
@@ -264,6 +266,8 @@ async def get_stats():
     return {"list": result, "max_per_min": RATE_LIMIT_PER_MIN, "global_total_token": global_total_token}
 
 
+from urllib.parse import quote
+
 @app.get("/api/admin/export-csv", dependencies=[Depends(require_admin_session)])
 async def export_csv():
     output = StringIO()
@@ -303,10 +307,18 @@ async def export_csv():
             data["last_msg"]
         ])
     output.seek(0)
+    csv_content = output.getvalue()
+
+    filename = "ai_student_report.csv"
+    encoded_name = quote(filename, encoding="utf-8")
+    headers = {
+        # 注意！这里是普通英文减号 - 不是软连字符
+        "Content-Disposition": f'attachment; filename*=utf-8\'\'{encoded_name}'
+    }
     return PlainTextResponse(
-        output.getvalue(),
+        csv_content,
         media_type="text/csv",
-        headers={"Content‑Disposition": 'attachment; filename="ai_student_report.csv"'}
+        headers=headers
     )
 
 
