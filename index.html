@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI助手</title>
+    <title>校园AI助手</title>
     <!-- Markdown解析库 marked -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
@@ -262,12 +262,10 @@
     <!-- 隐藏的文件input -->
     <input type="file" id="fileUpload" class="hidden-input" multiple>
     <input type="file" id="imgUpload" class="hidden-input" accept="image/*" multiple>
-
     <!-- 左侧侧边栏，只保留新建对话按钮 -->
     <div class="sidebar">
         <button class="new-chat-btn" id="newChatBtn">➕ 新建对话</button>
     </div>
-
     <!-- 主区域 -->
     <div class="main-container">
         <div class="chat-wrap" id="chatContainer">
@@ -299,26 +297,23 @@
         const welcomeText = document.getElementById('welcomeText');
         const msgInput = document.getElementById('msgInput');
         const sendBtn = document.getElementById('sendBtn');
-
         const imgUpload = document.getElementById('imgUpload');
         const fileUpload = document.getElementById('fileUpload');
         const btnImg = document.getElementById('btnImg');
         const btnFile = document.getElementById('btnFile');
-
         const previewWrap = document.getElementById('previewWrap');
         const imgModal = document.getElementById('imgModal');
         const modalImg = document.getElementById('modalImg');
         const newChatBtn = document.getElementById('newChatBtn');
-
         // ========= 后端对接配置 =========
         const API_URL = "/chat/stream";
         let messages = [];               // 多轮对话上下文
         let pendingAttachments = [];     // 待发送附件 {type:image/file,src?,name?,content?}
+        let isSending = false;           // 【新增】防抖标记，判断是否正在请求
 
         // JS手动触发文件弹窗
         btnImg.onclick = ()=> imgUpload.click();
         btnFile.onclick = ()=> fileUpload.click();
-
         // 工具：File转base64
         function fileToBase64(file){
             return new Promise(resolve=>{
@@ -335,7 +330,6 @@
                 r.readAsText(file);
             })
         }
-
         // 图片上传逻辑
         imgUpload.onchange = async function(e){
             const files = Array.from(e.target.files);
@@ -368,7 +362,6 @@
             console.log("图片选择完成，pendingAttachments：",pendingAttachments);
         }
         imgModal.onclick = ()=> imgModal.classList.remove('show');
-
         // 文件上传逻辑
         fileUpload.onchange = async function(e){
             const files = Array.from(e.target.files);
@@ -396,7 +389,6 @@
             fileUpload.value = null;
             console.log("文件选择完成，pendingAttachments：",pendingAttachments);
         }
-
         // 添加用户消息（直接渲染）
         function appendUserMessage(text, attachList){
             welcomeText.style.display = "none";
@@ -420,7 +412,6 @@
             chatContainer.appendChild(wrap);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
-
         // 创建AI消息DOM，返回dom引用用于流式写入
         function createAiMessageDom(){
             welcomeText.style.display = "none";
@@ -436,14 +427,17 @@
             const dom = wrap.querySelector('#ai-stream');
             return dom;
         }
-
-        // 发送消息对接后端SSE
+        // 发送消息对接后端SSE【增加防抖】
         async function sendMessage(){
+            // 防抖：正在发送，直接忽略重复点击/回车
+            if(isSending) return;
+
             const text = msgInput.value.trim();
             if(!text && pendingAttachments.length ===0) return;
+
+            isSending = true; // 标记进入发送状态
             sendBtn.disabled = true;
             console.log("点击发送，附件数组：",pendingAttachments);
-
             // 组装传给后端的user content数组（deepseek多模态格式）
             let userContent = [];
             userContent.push({type:"text", text:text});
@@ -455,17 +449,14 @@
                 }
             })
             console.log("组装后的userContent",userContent);
-
             // 渲染用户气泡
             appendUserMessage(text, pendingAttachments);
             // 存入上下文
             messages.push({role:"user", content:userContent});
-
             // 清空输入区
             msgInput.value = "";
             previewWrap.innerHTML = "";
             pendingAttachments = [];
-
             // 判断是否包含图片，选择模型
             const hasImage = messages.some(m=>{
                 if(Array.isArray(m.content)) return m.content.some(c=>c.type==="image_url");
@@ -473,11 +464,9 @@
             })
             const modelName = hasImage ? "deepseek-flash" : "deepseek-v4-pro";
             console.log("使用模型：",modelName);
-
             // 创建AI气泡
             const aiDom = createAiMessageDom();
             let aiFullText = "";
-
             try{
                 const resp = await fetch(API_URL,{
                     method:"POST",
@@ -511,7 +500,6 @@
                                 aiFullText += `\n【系统报错】${obj.error}`;
                                 aiDom.innerHTML = marked.parse(aiFullText);
                                 messages.push({role:"assistant", content:aiFullText});
-                                sendBtn.disabled = false;
                                 return;
                             }
                             if(obj.choices && obj.choices[0].delta && obj.choices[0].delta.content){
@@ -531,10 +519,12 @@
                 aiFullText += `\n【网络异常】${err.message}`;
                 aiDom.innerHTML = marked.parse(aiFullText);
                 alert("请求异常："+err.message);
+            }finally{
+                // 无论成功失败，解除锁定
+                isSending = false;
+                sendBtn.disabled = false;
             }
-            sendBtn.disabled = false;
         }
-
         sendBtn.onclick = sendMessage;
         // Enter发送，Shift+Enter换行
         msgInput.addEventListener('keydown', (e)=>{
@@ -543,7 +533,6 @@
                 sendMessage();
             }
         })
-
         // 新建对话：清空DOM + 清空会话上下文 + 清空附件
         newChatBtn.onclick = ()=>{
             chatContainer.innerHTML = "";
