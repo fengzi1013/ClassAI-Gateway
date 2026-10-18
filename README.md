@@ -140,12 +140,3 @@ MAX_USER_TEXT_LENGTH=6000
 2. 如果前端增加 Nginx 反向代理，需要处理真实客户端 IP 透传，否则限流、拉黑会全部识别为代理 IP。
 3. 全部数据内存存储，重启丢失；如需持久化需要自行增加 sqlite 数据库。
 4. 文件上传仅支持读取文本类文件；docx、pdf 二进制文件上传会读取乱码，不支持解析。
-
-## start_gateway.bat
-
-```
-@echo off
-cd /d %~dp0
-python main.py
-pause
-```
