@@ -56,7 +56,7 @@ pip install fastapi uvicorn httpx python‑dotenv
 
 ```
 # ===================== LLM大模型接口配置（兼容OpenAI协议接口） =====================
-# 大模型API Key
+# 大模型API Key（默认deepseek）
 LLM_API_KEY="sk-xxx"
 # 接口Base地址，例：https://api.deepseek.com/v1；火山方舟：https://ark.cn-beijing.volces.com/api/v1
 LLM_API_BASE="https://api.deepseek.com/v1"
@@ -64,6 +64,7 @@ LLM_API_BASE="https://api.deepseek.com/v1"
 MODEL_TEXT="deepseek-v4-pro"
 # 支持图片识图的多模态模型名称
 MODEL_VISION="deepseek-flash"
+
 # ===================== 服务监听配置 =====================
 # 服务监听地址 0.0.0.0 允许局域网其他机器访问；127.0.0.1仅本机访问
 LISTEN_HOST="0.0.0.0"
@@ -71,25 +72,24 @@ LISTEN_HOST="0.0.0.0"
 LISTEN_PORT=8000
 # HTTP请求上游大模型接口超时时间，单位秒
 TIMEOUT=120
+
 # ===================== 学生访问限流管控 =====================
 # 单IP每分钟最大提问次数
 RATE_LIMIT_PER_MIN=6
 # IP白名单，不受限流、拉黑限制；填写教师机内网IP，JSON字符串格式
-WHITE_LIST='["127.0.0.1","6.163.159.195"]'
+WHITE_LIST='["127.0.0.1","192.168.1.195"]'
+
 # ===================== 教师后台管理配置 =====================
 # 教师管理后台登录密码
 ADMIN_PASSWORD="admin123"
 # Admin会话加密密钥，请自行替换为随机字符串，用于内存session签名，不要泄露
-ADMIN_SECRET_KEY="replace-me-random-string-123456789"
+ADMIN_SECRET_KEY="98df23ac71b901e42f885610cc22ee77a419f3528ab14c60123456789abcde"
+
 # ===================== 请求安全防护配置 =====================
 # HTTP请求体最大字节，防御超大base64图片payload；10485760 = 10MB
 MAX_REQUEST_BODY_SIZE=10485760
 # 学生单条用户文本最大字符数，超长直接拒绝请求
 MAX_USER_TEXT_LENGTH=6000
-```
-> 
-> ADMIN_SECRET_KEY 建议生成一串随机十六进制字符串，例如：
-> `ADMIN_SECRET_KEY="98df23ac71b901e42f885610cc22ee77a419f3528ab14c60123456789abcdef"`
 
 3. 启动服务
 - Windows：双击运行 `start_gateway.bat`
